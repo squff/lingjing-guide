@@ -83,7 +83,7 @@ import "./styles.css";
 
 type AppMode = "portal" | "visitor" | "admin";
 type AdminTab = "overview" | "knowledge" | "finale";
-type VisitorTab = "route" | "chat" | "photo" | "safety" | "settings";
+type VisitorTab = "route" | "map" | "chat" | "photo" | "safety" | "settings";
 
 type Message = {
   role: "visitor" | "guide";
@@ -172,8 +172,67 @@ const guideMapPositions: Record<string, { x: number; y: number }> = {
   雨天入口: { x: 79, y: 43 },
 };
 
+const spotPhotoMap: Record<string, { image: string; label: string }> = {
+  灵山大照壁: { image: "/spots/shengjing-gate.jpg", label: "灵山胜境入口实景" },
+  五明桥: { image: "/spots/wuming-bridge-sina.jpg", label: "五明桥区域实景" },
+  佛足坛: { image: "/spots/buddha-foot-close.jpg", label: "佛足坛实景" },
+  五智门: { image: "/spots/wuzhi-gate-sina.jpg", label: "五智门实景" },
+  菩提大道: { image: "/spots/bodhi-avenue.jpg", label: "菩提大道实景" },
+  九龙灌浴: { image: "/spots/jiulong-sina.jpg", label: "九龙灌浴实景" },
+  祥符禅寺: { image: "/spots/shengjing-gate.jpg", label: "祥符禅寺周边实景" },
+  灵山大佛: { image: "/spots/lingshan-buddha.jpg", label: "灵山大佛实景" },
+  佛手广场: { image: "/spots/buddha-hand.jpg", label: "佛手广场实景" },
+  百子戏弥勒: { image: "/spots/jiulong-bath.jpg", label: "百子戏弥勒周边实景" },
+  灵山梵宫: { image: "/spots/brahma-palace-wide.jpg", label: "灵山梵宫实景" },
+  五印坛城: { image: "/spots/brahma-palace.jpg", label: "五印坛城建筑实景" },
+  无尽意斋: { image: "/spots/bodhi-avenue.jpg", label: "无尽意斋周边实景" },
+  降魔浮雕: { image: "/spots/buddha-foot-close.jpg", label: "佛教文化景观实景" },
+  阿育王柱: { image: "/spots/wuming-bridge-sina.jpg", label: "阿育王柱周边实景" },
+  佛教文化博览馆: { image: "/spots/brahma-palace-wide.jpg", label: "佛教文化建筑实景" },
+  入口服务区: { image: "/spots/shengjing-gate.jpg", label: "入口服务区实景" },
+  古银杏长椅: { image: "/spots/bodhi-avenue.jpg", label: "林荫休息区实景" },
+  中轴服务台: { image: "/spots/bodhi-avenue.jpg", label: "中轴服务区实景" },
+  梵宫轻食: { image: "/spots/brahma-palace-wide.jpg", label: "梵宫轻食周边实景" },
+  东侧出口: { image: "/spots/shengjing-gate.jpg", label: "景区出口周边实景" },
+  实时定位: { image: "/spots/wuming-bridge-sina.jpg", label: "当前位置实景" },
+  最佳机位: { image: "/spots/jiulong-sina.jpg", label: "最佳机位实景" },
+  低台阶通道: { image: "/spots/bodhi-avenue.jpg", label: "舒缓通道实景" },
+  最近卫生间: { image: "/spots/bodhi-avenue.jpg", label: "服务点周边实景" },
+  雨天入口: { image: "/spots/brahma-palace-wide.jpg", label: "雨天入口实景" },
+};
+
+const fallbackSpotPhotos = [
+  { image: "/spots/shengjing-gate.jpg", label: "灵山胜境入口实景" },
+  { image: "/spots/wuzhi-gate-sina.jpg", label: "灵山胜境门楼实景" },
+  { image: "/spots/bodhi-avenue.jpg", label: "灵山胜境步道实景" },
+  { image: "/spots/jiulong-sina.jpg", label: "灵山胜境广场实景" },
+  { image: "/spots/buddha-hand.jpg", label: "灵山胜境祈福点实景" },
+  { image: "/spots/brahma-palace-wide.jpg", label: "灵山胜境建筑实景" },
+];
+
 function getGuideMapPosition(name: string, fallback: { x: number; y: number }) {
   return guideMapPositions[name] ?? fallback;
+}
+
+function getSpotPhoto(name: string) {
+  const mappedPhoto = spotPhotoMap[name];
+  if (mappedPhoto) return mappedPhoto;
+
+  const photoIndex =
+    Array.from(name).reduce((total, character) => total + character.charCodeAt(0), 0) % fallbackSpotPhotos.length;
+  return fallbackSpotPhotos[photoIndex];
+}
+
+function briefText(text: string, length = 92) {
+  return text.length > length ? `${text.slice(0, length)}...` : text;
+}
+
+function interpolateMapPosition(from: { x: number; y: number }, to: { x: number; y: number }, progress: number) {
+  const ratio = Math.min(Math.max(progress, 0), 100) / 100;
+  return {
+    x: from.x + (to.x - from.x) * ratio,
+    y: from.y + (to.y - from.y) * ratio,
+  };
 }
 
 function getModeFromHash(): AppMode {
@@ -445,7 +504,9 @@ function VisitorConsole(props: {
   return (
     <section className="visitor-grid">
       <TripStatusBar route={route} profile={profile} ask={ask} playDemoMode={playDemoMode} demoPlaying={demoPlaying} />
-      <MapPulsePanel route={route} ask={ask} />
+      <div className="desktop-map-panel">
+        <MapPulsePanel route={route} ask={ask} />
+      </div>
       <div className="guide-stage">
         <DigitalHuman
           speaking={speaking}
@@ -471,6 +532,7 @@ function VisitorConsole(props: {
       <div className="mobile-command-dock">
         {[
           { id: "route", label: "路线", icon: <Route size={17} /> },
+          { id: "map", label: "地图", icon: <MapPin size={17} /> },
           { id: "chat", label: "问答", icon: <Bot size={17} /> },
           { id: "photo", label: "拍照", icon: <Camera size={17} /> },
           { id: "safety", label: "应急", icon: <ShieldCheck size={17} /> },
@@ -490,6 +552,11 @@ function VisitorConsole(props: {
             <RouteTimeline route={route} />
             <SmartCompanionPanel ask={ask} />
           </>
+        )}
+        {activeTab === "map" && (
+          <div className="mobile-map-panel">
+            <MapPulsePanel route={route} ask={ask} />
+          </div>
         )}
         {activeTab === "chat" && (
           <ChatPanel messages={messages} question={question} setQuestion={setQuestion} ask={ask} voiceState={voiceState} startVoiceDemo={startVoiceDemo} />
@@ -897,10 +964,12 @@ function RouteTimeline({ route }: { route: ReturnType<typeof recommendRoute> }) 
 
 function MapPulsePanel({ route, ask }: { route: ReturnType<typeof recommendRoute>; ask: (question?: string) => void }) {
   const [activeStepIndex, setActiveStepIndex] = useState(0);
+  const [segmentProgress, setSegmentProgress] = useState(0);
   const [navigationActive, setNavigationActive] = useState(false);
   const [showAllPois, setShowAllPois] = useState(false);
   const [showFacilities, setShowFacilities] = useState(true);
   const [showRouteList, setShowRouteList] = useState(false);
+  const [selectedMapItem, setSelectedMapItem] = useState(route.spots[0] ?? "");
   const routeNodes = route.spots
     .map((name) => spots.find((node) => node.name === name))
     .filter((node): node is (typeof spots)[number] => Boolean(node));
@@ -910,16 +979,25 @@ function MapPulsePanel({ route, ask }: { route: ReturnType<typeof recommendRoute
   const matchedSteps = realSceneSteps.filter((step) => routeStepNames.has(step.from) || routeStepNames.has(step.to));
   const sceneSteps = matchedSteps.length >= 3 ? matchedSteps : realSceneSteps.slice(0, 6);
   const activeStep = sceneSteps[Math.min(activeStepIndex, sceneSteps.length - 1)] ?? realSceneSteps[0];
-  const activeStepProgress = sceneSteps.length > 1 ? Math.round((activeStepIndex / (sceneSteps.length - 1)) * 100) : 100;
+  const activeStepProgress = sceneSteps.length > 0 ? Math.round(((activeStepIndex + segmentProgress / 100) / sceneSteps.length) * 100) : 0;
   const activeFromNode = spots.find((node) => node.name === activeStep.from) ?? current;
   const activeToNode = spots.find((node) => node.name === activeStep.to) ?? next ?? current;
+
+  useEffect(() => {
+    setActiveStepIndex(0);
+    setSegmentProgress(0);
+    setNavigationActive(false);
+    setSelectedMapItem(route.spots[0] ?? "");
+  }, [route.name, route.spots]);
 
   function startNavigation(index = activeStepIndex) {
     const nextIndex = Math.min(index, sceneSteps.length - 1);
     const step = sceneSteps[nextIndex];
     if (!step) return;
     setActiveStepIndex(nextIndex);
+    setSegmentProgress(0);
     setNavigationActive(true);
+    setSelectedMapItem(step.from);
     ask(`开始景区导览图导航：从${step.from}到${step.to}。请告诉我下一步怎么走`);
   }
 
@@ -927,8 +1005,44 @@ function MapPulsePanel({ route, ask }: { route: ReturnType<typeof recommendRoute
     const offset = direction === "next" ? 1 : -1;
     const nextIndex = Math.min(Math.max(activeStepIndex + offset, 0), sceneSteps.length - 1);
     setActiveStepIndex(nextIndex);
+    setSegmentProgress(0);
     const step = sceneSteps[nextIndex];
+    if (step) setSelectedMapItem(step.from);
     if (step) ask(`继续导航：从${step.from}到${step.to}`);
+  }
+
+  function advanceNavigation() {
+    if (!activeStep) return;
+
+    const nextProgress = Math.min((navigationActive ? segmentProgress : 0) + 25, 100);
+    setNavigationActive(true);
+
+    if (nextProgress >= 100) {
+      setSelectedMapItem(activeStep.to);
+    } else {
+      setSelectedMapItem(activeStep.from);
+    }
+
+    if (nextProgress >= 100 && activeStepIndex < sceneSteps.length - 1) {
+      const nextIndex = activeStepIndex + 1;
+      const nextStep = sceneSteps[nextIndex];
+      setActiveStepIndex(nextIndex);
+      setSegmentProgress(0);
+      if (nextStep) {
+        setSelectedMapItem(nextStep.from);
+        ask(`已到达${activeStep.to}，继续前往${nextStep.to}`);
+      }
+      return;
+    }
+
+    if (nextProgress >= 100) {
+      setSegmentProgress(100);
+      ask(`已到达${activeStep.to}，当前路线已完成。`);
+      return;
+    }
+
+    setSegmentProgress(nextProgress);
+    ask(`模拟定位前进到当前路段 ${nextProgress}%：${activeStep.from}前往${activeStep.to}`);
   }
 
   return (
@@ -962,7 +1076,7 @@ function MapPulsePanel({ route, ask }: { route: ReturnType<typeof recommendRoute
           <div className="navigation-progress" aria-label={`导航进度 ${activeStepProgress}%`}>
             <span style={{ width: `${activeStepProgress}%` }} />
           </div>
-          <p>{activeStep.hint}</p>
+          <p>{activeStep.hint} 当前路段已前进 {segmentProgress}%。</p>
         </div>
       )}
       <div className="mini-map scenic-map guide-map-mode" aria-label="景区 2D 导览图导航">
@@ -970,6 +1084,10 @@ function MapPulsePanel({ route, ask }: { route: ReturnType<typeof recommendRoute
           route={route}
           activeStep={activeStep}
           navigationActive={navigationActive}
+          segmentProgress={segmentProgress}
+          advanceNavigation={advanceNavigation}
+          selectedMapItem={selectedMapItem}
+          setSelectedMapItem={setSelectedMapItem}
           showAllPois={showAllPois}
           showFacilities={showFacilities}
           ask={ask}
@@ -982,12 +1100,17 @@ function MapPulsePanel({ route, ask }: { route: ReturnType<typeof recommendRoute
         showRouteList={showRouteList}
         setActiveIndex={(index) => {
           setActiveStepIndex(index);
+          setSegmentProgress(0);
           setNavigationActive(true);
         }}
         toggleRouteList={() => setShowRouteList((current) => !current)}
         startNavigation={startNavigation}
         moveNavigation={moveNavigation}
-        stopNavigation={() => setNavigationActive(false)}
+        advanceNavigation={advanceNavigation}
+        stopNavigation={() => {
+          setNavigationActive(false);
+          setSegmentProgress(0);
+        }}
         ask={ask}
       />
       <div className="map-layer-controls">
@@ -1016,11 +1139,15 @@ function ScenicGuideMapView(props: {
   route: ReturnType<typeof recommendRoute>;
   activeStep: (typeof realSceneSteps)[number];
   navigationActive: boolean;
+  segmentProgress: number;
+  advanceNavigation: () => void;
+  selectedMapItem: string;
+  setSelectedMapItem: (name: string) => void;
   showAllPois: boolean;
   showFacilities: boolean;
   ask: (question?: string) => void;
 }) {
-  const { route, activeStep, navigationActive, showAllPois, showFacilities, ask } = props;
+  const { route, activeStep, navigationActive, segmentProgress, advanceNavigation, selectedMapItem, setSelectedMapItem, showAllPois, showFacilities, ask } = props;
   const routeNodes = route.spots
     .map((name) => spots.find((node) => node.name === name))
     .filter((node): node is (typeof spots)[number] => Boolean(node));
@@ -1031,6 +1158,12 @@ function ScenicGuideMapView(props: {
   const fromNode = spots.find((node) => node.name === activeStep.from) ?? routeNodes[0];
   const toNode = spots.find((node) => node.name === activeStep.to) ?? routeNodes[1] ?? routeNodes[0];
   const fromPosition = fromNode ? getGuideMapPosition(fromNode.name, fromNode) : null;
+  const toPosition = toNode ? getGuideMapPosition(toNode.name, toNode) : fromPosition;
+  const currentPosition = fromPosition && toPosition && navigationActive ? interpolateMapPosition(fromPosition, toPosition, segmentProgress) : fromPosition;
+  const selectedSpot = spots.find((spot) => spot.name === selectedMapItem);
+  const selectedFacility = facilities.find((facility) => facility.name === selectedMapItem);
+  const selectedPoi = realScenePois.find((poi) => poi.name === selectedMapItem);
+  const selectedPhoto = getSpotPhoto(selectedMapItem);
 
   return (
     <div className="guide-map-shell">
@@ -1064,7 +1197,10 @@ function ScenicGuideMapView(props: {
             ].filter(Boolean).join(" ")}
             style={{ left: `${position.x}%`, top: `${position.y}%` }}
             title={`${node.name}：热度 ${node.heat}`}
-            onClick={() => ask(`在景区导览图上讲解${node.name}`)}
+            onClick={() => {
+              setSelectedMapItem(node.name);
+              ask(`在景区导览图上讲解${node.name}`);
+            }}
           >
             <span>{routeIndex >= 0 ? routeIndex + 1 : ""}</span>
             <b>{node.name}</b>
@@ -1078,7 +1214,10 @@ function ScenicGuideMapView(props: {
           className={`guide-scene-poi poi-${poi.type}`}
           style={{ left: `${getGuideMapPosition(poi.name, poi).x}%`, top: `${getGuideMapPosition(poi.name, poi).y}%` }}
           title={`${poi.name}：${poi.detail}`}
-          onClick={() => ask(`在景区导览图上定位${poi.name}：${poi.detail}`)}
+          onClick={() => {
+            setSelectedMapItem(poi.name);
+            ask(`在景区导览图上定位${poi.name}：${poi.detail}`);
+          }}
         >
           {poi.icon}
         </button>
@@ -1090,29 +1229,59 @@ function ScenicGuideMapView(props: {
           className="guide-facility"
           style={{ left: `${getGuideMapPosition(facility.name, facility).x}%`, top: `${getGuideMapPosition(facility.name, facility).y}%` }}
           title={`${facility.type}：${facility.name}`}
-          onClick={() => ask(`景区导览图带我去${facility.name}`)}
+          onClick={() => {
+            setSelectedMapItem(facility.name);
+            ask(`景区导览图带我去${facility.name}`);
+          }}
         >
           {facility.icon}
         </button>
       ))}
 
-      {fromPosition && (
+      {currentPosition && (
         <button
-          className="guide-location"
-          style={{ left: `${fromPosition.x}%`, top: `${fromPosition.y}%` }}
-          title={`当前位置：${fromNode?.name}`}
-          onClick={() => ask(`我在景区导览图的${fromNode?.name}，下一步怎么走？`)}
+          className={`guide-location ${navigationActive ? "moving" : ""}`}
+          style={{ left: `${currentPosition.x}%`, top: `${currentPosition.y}%` }}
+          title={`当前位置：${navigationActive ? `${activeStep.from}前往${activeStep.to} ${segmentProgress}%` : fromNode?.name}`}
+          onClick={() => ask(`我现在在${activeStep.from}到${activeStep.to}之间，进度${segmentProgress}%，下一步怎么走？`)}
         >
           <Navigation size={18} />
         </button>
       )}
 
+      {(selectedSpot || selectedFacility || selectedPoi) && (
+        <div className="guide-spot-card">
+          <div className="guide-spot-photo">
+            <img key={selectedPhoto.image} src={selectedPhoto.image} alt={selectedPhoto.label} />
+            <span>{selectedPhoto.label}</span>
+          </div>
+          <div className="guide-spot-content">
+            <div>
+              <span>{selectedSpot ? selectedSpot.category : selectedFacility ? selectedFacility.type : selectedPoi?.type}</span>
+              <strong>{selectedMapItem}</strong>
+            </div>
+            <p>{selectedSpot ? briefText(selectedSpot.description) : selectedFacility ? `${selectedFacility.name}，当前拥挤度：${selectedFacility.crowd}。` : selectedPoi?.detail}</p>
+            {selectedSpot && (
+              <div className="guide-spot-meta">
+                <b>热度 {selectedSpot.heat}</b>
+                <b>{selectedSpot.duration} 分钟</b>
+                <b>{selectedSpot.tags[0]}</b>
+              </div>
+            )}
+            <div className="guide-spot-actions">
+              <button onClick={() => ask(`详细讲解${selectedMapItem}`)}>讲解</button>
+              <button onClick={() => ask(`带我去${selectedMapItem}`)}>导航</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="guide-map-bottom-sheet">
         <span>{navigationActive ? "导览图导航中" : "导览图路线已规划"}</span>
-        <strong>{activeStep.hint}</strong>
-        <button onClick={() => ask(`继续按景区导览图导航到${activeStep.to}`)}>
+        <strong>{activeStep.hint}{navigationActive ? ` 已前进 ${segmentProgress}%。` : ""}</strong>
+        <button onClick={advanceNavigation}>
           <Navigation size={16} />
-          继续
+          {navigationActive ? "模拟前进" : "开始"}
         </button>
       </div>
     </div>
@@ -1158,10 +1327,11 @@ function RealSceneNavigation(props: {
   toggleRouteList: () => void;
   startNavigation: (index?: number) => void;
   moveNavigation: (direction: "next" | "previous") => void;
+  advanceNavigation: () => void;
   stopNavigation: () => void;
   ask: (question?: string) => void;
 }) {
-  const { steps, activeIndex, navigationActive, showRouteList, setActiveIndex, toggleRouteList, startNavigation, moveNavigation, stopNavigation, ask } = props;
+  const { steps, activeIndex, navigationActive, showRouteList, setActiveIndex, toggleRouteList, startNavigation, moveNavigation, advanceNavigation, stopNavigation, ask } = props;
   const activeStep = steps[activeIndex];
   return (
     <div className={`real-scene-nav ${navigationActive ? "is-navigating" : ""}`}>
@@ -1180,6 +1350,11 @@ function RealSceneNavigation(props: {
             <Navigation size={16} />
             {navigationActive ? "下一段" : "开始"}
           </button>
+          {navigationActive && (
+            <button onClick={advanceNavigation}>
+              前进
+            </button>
+          )}
           {navigationActive && (
             <button onClick={stopNavigation}>
               结束
