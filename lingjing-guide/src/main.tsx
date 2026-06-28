@@ -9,6 +9,7 @@ import {
   BrainCircuit,
   Camera,
   Clock3,
+  Compass,
   Database,
   Gauge,
   HeartPulse,
@@ -67,6 +68,7 @@ import {
   operationSuggestions,
   photoRecommendations,
   proactiveAlerts,
+  realScenePois,
   realSceneSteps,
   recommendRoute,
   routeConversion,
@@ -81,6 +83,7 @@ import "./styles.css";
 
 type AppMode = "portal" | "visitor" | "admin";
 type AdminTab = "overview" | "knowledge" | "finale";
+type VisitorTab = "route" | "chat" | "photo" | "safety" | "settings";
 
 type Message = {
   role: "visitor" | "guide";
@@ -89,6 +92,89 @@ type Message = {
 };
 
 const chartColors = ["#d8b766", "#74c7b0", "#ef8f72", "#8aa8ff", "#c7d66b"];
+
+const guideModels = [
+  {
+    id: "mori-miko",
+    label: "狐娘巫女",
+    tone: "温柔讲解",
+    source: "Fox Hime Zero / mori_miko",
+    path: "/live2d/foxgirl/mori_miko_guide.model3.json",
+    scale: 0.9,
+    y: 0.08,
+  },
+  {
+    id: "mori-suit",
+    label: "狐娘制服",
+    tone: "活泼陪伴",
+    source: "Fox Hime Zero / mori_suit",
+    path: "/live2d/mori_suit/mori_suit_guide.model3.json",
+    scale: 0.9,
+    y: 0.08,
+  },
+  {
+    id: "ruri-miko",
+    label: "琉璃巫女",
+    tone: "安静治愈",
+    source: "Fox Hime Zero / ruri_miko",
+    path: "/live2d/ruri_miko/ruri_miko_guide.model3.json",
+    scale: 0.9,
+    y: 0.08,
+  },
+  {
+    id: "mori-cape",
+    label: "狐娘披风",
+    tone: "元气路线",
+    source: "Fox Hime Zero / mori_mikoc",
+    path: "/live2d/mori_mikoc/mori_mikoc_guide.model3.json",
+    scale: 0.9,
+    y: 0.08,
+  },
+  {
+    id: "senko",
+    label: "仙狐导游",
+    tone: "长辈友好",
+    source: "Live2D / Senko_Normals",
+    path: "/live2d/senko/senko.model3.json",
+    scale: 0.78,
+    y: 0.08,
+  },
+] as const;
+
+type GuideModel = (typeof guideModels)[number];
+
+const guideMapPositions: Record<string, { x: number; y: number }> = {
+  灵山大照壁: { x: 46, y: 84 },
+  五明桥: { x: 27, y: 68 },
+  佛足坛: { x: 32, y: 62 },
+  五智门: { x: 37, y: 55 },
+  菩提大道: { x: 36, y: 50 },
+  九龙灌浴: { x: 36, y: 46 },
+  祥符禅寺: { x: 35, y: 31 },
+  灵山大佛: { x: 24, y: 18 },
+  佛手广场: { x: 22, y: 43 },
+  百子戏弥勒: { x: 42, y: 35 },
+  灵山梵宫: { x: 79, y: 42 },
+  五印坛城: { x: 66, y: 59 },
+  无尽意斋: { x: 6, y: 29 },
+  降魔浮雕: { x: 31, y: 34 },
+  阿育王柱: { x: 12, y: 53 },
+  佛教文化博览馆: { x: 51, y: 42 },
+  入口服务区: { x: 52, y: 87 },
+  古银杏长椅: { x: 71, y: 60 },
+  中轴服务台: { x: 39, y: 57 },
+  梵宫轻食: { x: 82, y: 47 },
+  东侧出口: { x: 74, y: 70 },
+  实时定位: { x: 47, y: 85 },
+  最佳机位: { x: 37, y: 47 },
+  低台阶通道: { x: 33, y: 35 },
+  最近卫生间: { x: 39, y: 57 },
+  雨天入口: { x: 79, y: 43 },
+};
+
+function getGuideMapPosition(name: string, fallback: { x: number; y: number }) {
+  return guideMapPositions[name] ?? fallback;
+}
 
 function getModeFromHash(): AppMode {
   const hash = window.location.hash.replace("#/", "").replace("#", "");
@@ -157,14 +243,9 @@ function App() {
     }, 900);
   }
 
-  function runJudgeDemo() {
-    updateProfile({ group: "老人同行", pace: "轻松", duration: "半日", narration: "长辈友好" });
-    ask("评委演示：老人同行半日游，我有点累，请给我路线、地图和应急建议");
-  }
-
   if (mode === "visitor") {
     return (
-      <VisitorShell runJudgeDemo={runJudgeDemo}>
+      <VisitorShell>
         <VisitorConsole
           profile={profile}
           updateProfile={updateProfile}
@@ -216,7 +297,7 @@ function PortalShell() {
   );
 }
 
-function VisitorShell({ children, runJudgeDemo }: { children: React.ReactNode; runJudgeDemo: () => void }) {
+function VisitorShell({ children }: { children: React.ReactNode }) {
   return (
     <main className="visitor-shell">
       <header className="client-header">
@@ -229,10 +310,6 @@ function VisitorShell({ children, runJudgeDemo }: { children: React.ReactNode; r
           <h1>像真人导游一样陪你逛完整个景区</h1>
         </div>
         <div className="header-actions">
-          <button className="ghost-action" onClick={runJudgeDemo}>
-            <Play size={17} />
-            评委演示
-          </button>
           <a className="switch-link" href="#/admin">进入管理端</a>
         </div>
       </header>
@@ -330,6 +407,9 @@ function VisitorConsole(props: {
   setVoiceConfig: (config: VoiceConfig) => void;
   voiceMessage: string;
 }) {
+  const [activeTab, setActiveTab] = useState<VisitorTab>("route");
+  const [demoPlaying, setDemoPlaying] = useState(false);
+  const [selectedGuideId, setSelectedGuideId] = useState<GuideModel["id"]>("mori-miko");
   const {
     profile,
     updateProfile,
@@ -346,13 +426,35 @@ function VisitorConsole(props: {
     setVoiceConfig,
     voiceMessage,
   } = props;
+  const selectedGuide = guideModels.find((model) => model.id === selectedGuideId) ?? guideModels[0];
+
+  function playDemoMode() {
+    setDemoPlaying(true);
+    setActiveTab("route");
+    ask("进入评委演示模式：老人同行半日游，从路线生成、地图导航、语音问答到后台闭环依次展示");
+    window.setTimeout(() => setActiveTab("chat"), 900);
+    window.setTimeout(() => ask("九龙灌浴什么时候开始？如果老人同行怎么避开人流？"), 1300);
+    window.setTimeout(() => setActiveTab("photo"), 2400);
+    window.setTimeout(() => setActiveTab("safety"), 3400);
+    window.setTimeout(() => {
+      setActiveTab("route");
+      setDemoPlaying(false);
+    }, 4700);
+  }
 
   return (
     <section className="visitor-grid">
-      <TripStatusBar route={route} profile={profile} ask={ask} />
+      <TripStatusBar route={route} profile={profile} ask={ask} playDemoMode={playDemoMode} demoPlaying={demoPlaying} />
       <MapPulsePanel route={route} ask={ask} />
       <div className="guide-stage">
-        <DigitalHuman speaking={speaking} mood={latestAnswer?.emotion ?? "中性"} />
+        <DigitalHuman
+          speaking={speaking}
+          mood={latestAnswer?.emotion ?? "中性"}
+          model={selectedGuide}
+          selectedGuideId={selectedGuideId}
+          setSelectedGuideId={setSelectedGuideId}
+          onAction={ask}
+        />
         <div className="stage-panel">
           <div>
             <p className="eyebrow">当前推荐路线</p>
@@ -366,18 +468,48 @@ function VisitorConsole(props: {
         </div>
       </div>
 
-      <PlannerPanel profile={profile} updateProfile={updateProfile} route={route} ask={ask} />
-      <ChatPanel messages={messages} question={question} setQuestion={setQuestion} ask={ask} voiceState={voiceState} startVoiceDemo={startVoiceDemo} />
-      <SmartCompanionPanel ask={ask} />
-      <RouteTimeline route={route} />
-      <PhotoPanel ask={ask} />
-      <EmergencyPanel ask={ask} />
-      <VoiceEnginePanel config={voiceConfig} setConfig={setVoiceConfig} message={voiceMessage} />
+      <div className="mobile-command-dock">
+        {[
+          { id: "route", label: "路线", icon: <Route size={17} /> },
+          { id: "chat", label: "问答", icon: <Bot size={17} /> },
+          { id: "photo", label: "拍照", icon: <Camera size={17} /> },
+          { id: "safety", label: "应急", icon: <ShieldCheck size={17} /> },
+          { id: "settings", label: "设置", icon: <Settings size={17} /> },
+        ].map((item) => (
+          <button key={item.id} className={activeTab === item.id ? "active" : ""} onClick={() => setActiveTab(item.id as VisitorTab)}>
+            {item.icon}
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="visitor-tab-surface">
+        {activeTab === "route" && (
+          <>
+            <PlannerPanel profile={profile} updateProfile={updateProfile} route={route} ask={ask} />
+            <RouteTimeline route={route} />
+            <SmartCompanionPanel ask={ask} />
+          </>
+        )}
+        {activeTab === "chat" && (
+          <ChatPanel messages={messages} question={question} setQuestion={setQuestion} ask={ask} voiceState={voiceState} startVoiceDemo={startVoiceDemo} />
+        )}
+        {activeTab === "photo" && <PhotoPanel ask={ask} />}
+        {activeTab === "safety" && <EmergencyPanel ask={ask} />}
+        {activeTab === "settings" && <VoiceEnginePanel config={voiceConfig} setConfig={setVoiceConfig} message={voiceMessage} />}
+      </div>
     </section>
   );
 }
 
-function TripStatusBar({ route, profile, ask }: { route: ReturnType<typeof recommendRoute>; profile: VisitorProfile; ask: (question?: string) => void }) {
+function TripStatusBar(props: {
+  route: ReturnType<typeof recommendRoute>;
+  profile: VisitorProfile;
+  ask: (question?: string) => void;
+  playDemoMode: () => void;
+  demoPlaying: boolean;
+}) {
+  const { route, profile, ask, playDemoMode, demoPlaying } = props;
   const nextStop = route.spots[1] ?? route.spots[0] ?? "自由游览";
 
   return (
@@ -402,11 +534,23 @@ function TripStatusBar({ route, profile, ask }: { route: ReturnType<typeof recom
         <Navigation size={17} />
         重新规划
       </button>
+      <button className="demo-command" onClick={playDemoMode} disabled={demoPlaying}>
+        <MonitorPlay size={17} />
+        {demoPlaying ? "演示中" : "评委演示"}
+      </button>
     </div>
   );
 }
 
-function DigitalHuman({ speaking, mood }: { speaking: boolean; mood: Answer["emotion"] }) {
+function DigitalHuman(props: {
+  speaking: boolean;
+  mood: Answer["emotion"];
+  model: GuideModel;
+  selectedGuideId: GuideModel["id"];
+  setSelectedGuideId: (id: GuideModel["id"]) => void;
+  onAction: (question?: string) => void;
+}) {
+  const { speaking, mood, model, selectedGuideId, setSelectedGuideId, onAction } = props;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const modelRef = useRef<{
     destroy: (destroyCubism?: boolean) => void;
@@ -419,12 +563,65 @@ function DigitalHuman({ speaking, mood }: { speaking: boolean; mood: Answer["emo
   } | null>(null);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "fallback">("loading");
   const [loadError, setLoadError] = useState("");
+  const [interactionMode, setInteractionMode] = useState<"welcome" | "guide" | "photo" | "comfort">("welcome");
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const interactionCopy = {
+    welcome: { label: "迎宾", text: "点我开始智能导览", prompt: "狐娘导游，请先介绍今天最适合我的游览方式" },
+    guide: { label: "指路", text: "我来带你走下一站", prompt: "狐娘导游，带我去下一站并说明怎么走" },
+    photo: { label: "拍照", text: "帮你找最佳机位", prompt: "狐娘导游，推荐附近最好看的拍照机位" },
+    comfort: { label: "安抚", text: "累了就换舒缓路线", prompt: "狐娘导游，我有点累，请改成舒缓路线" },
+  };
+
+  function cycleInteraction() {
+    const order: (keyof typeof interactionCopy)[] = ["welcome", "guide", "photo", "comfort"];
+    const next = order[(order.indexOf(interactionMode) + 1) % order.length];
+    setInteractionMode(next);
+    applyInteractionPose(next);
+    onAction(interactionCopy[next].prompt);
+  }
+
+  function applyInteractionPose(mode: keyof typeof interactionCopy) {
+    const model = modelRef.current;
+    if (!model) return;
+    const value = mode === "guide" ? 10 : mode === "photo" ? -8 : mode === "comfort" ? 4 : 0;
+    model.setParameter("ParamAngleX", value);
+    model.setParameter("ParamAngleY", mode === "comfort" ? -5 : 0);
+    model.setParameter("ParamAngleZ", mode === "photo" ? -4 : mode === "guide" ? 3 : 0);
+    model.setParameter("ParamMouthForm", mode === "comfort" ? -0.4 : 0.55);
+    model.setParameter("ParamMouthOpenY", mode === "welcome" ? 0.18 : 0.32);
+    model.setParameter("ParamEyeLOpen", mode === "comfort" ? 0.72 : 1);
+    model.setParameter("ParamEyeROpen", mode === "comfort" ? 0.72 : 1);
+  }
+
+  function followPointer(event: React.PointerEvent<HTMLDivElement>) {
+    const liveModel = modelRef.current;
+    if (!liveModel) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width - 0.5) * 24;
+    const y = ((event.clientY - rect.top) / rect.height - 0.5) * -16;
+    liveModel.setParameter("ParamAngleX", x);
+    liveModel.setParameter("ParamAngleY", y);
+    liveModel.setParameter("ParamBodyAngleX", x * 0.35);
+  }
+
+  function resetPointerPose() {
+    const liveModel = modelRef.current;
+    if (!liveModel) return;
+    liveModel.setParameter("ParamAngleX", 0);
+    liveModel.setParameter("ParamAngleY", 0);
+    liveModel.setParameter("ParamBodyAngleX", 0);
+  }
 
   useEffect(() => {
     let cancelled = false;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const liveCanvas = canvas;
+    setLoadState("loading");
+    setLoadError("");
+    modelRef.current?.destroy(false);
+    modelRef.current = null;
 
     const resizeCanvas = () => {
       const rect = liveCanvas.getBoundingClientRect();
@@ -442,7 +639,7 @@ function DigitalHuman({ speaking, mood }: { speaking: boolean; mood: Answer["emo
       try {
         const { Live2DCubismModel } = await import("live2d-renderer");
         if (cancelled) return;
-        const model = new Live2DCubismModel(liveCanvas, {
+        const liveModel = new Live2DCubismModel(liveCanvas, {
           cubismCorePath: "/live2d/live2dcubismcore.min.js",
           autoAnimate: true,
           autoInteraction: true,
@@ -452,20 +649,20 @@ function DigitalHuman({ speaking, mood }: { speaking: boolean; mood: Answer["emo
           zoomEnabled: false,
           enablePan: false,
           doubleClickReset: false,
-          scale: 1.22,
-          y: 0.08,
-          appendYOffset: 0.08,
+          scale: model.scale,
+          y: model.y,
+          appendYOffset: model.y,
           enableLipsync: true,
         });
-        await model.load("/live2d/senko/senko.model3.json");
+        await liveModel.load(model.path);
         if (cancelled) {
-          model.destroy(false);
+          liveModel.destroy(false);
           return;
         }
-        modelRef.current = model;
-        model.centerModel();
-        model.scale = 1.22;
-        model.y = 0.08;
+        modelRef.current = liveModel;
+        liveModel.centerModel();
+        liveModel.scale = model.scale;
+        liveModel.y = model.y;
         setLoadState("ready");
       } catch (error) {
         setLoadError(error instanceof Error ? error.message : "Live2D 加载失败");
@@ -481,11 +678,10 @@ function DigitalHuman({ speaking, mood }: { speaking: boolean; mood: Answer["emo
       modelRef.current?.destroy(false);
       modelRef.current = null;
     };
-  }, []);
+  }, [model]);
 
   useEffect(() => {
     if (!modelRef.current) return;
-    if (speaking) modelRef.current.startMotion("Tap", 0, 2).catch(() => undefined);
     const id = window.setInterval(() => {
       modelRef.current?.setParameter("ParamMouthOpenY", speaking ? 0.25 + Math.random() * 0.55 : 0);
       modelRef.current?.setParameter("ParamAngleX", speaking ? Math.sin(Date.now() / 420) * 6 : 0);
@@ -494,9 +690,10 @@ function DigitalHuman({ speaking, mood }: { speaking: boolean; mood: Answer["emo
   }, [speaking]);
 
   return (
-    <div className={`digital-human ${speaking ? "speaking" : ""}`}>
+    <div className={`digital-human ${speaking ? "speaking" : ""}`} onPointerMove={followPointer} onPointerLeave={resetPointerPose}>
       <div className="aura" />
-      <canvas ref={canvasRef} className={`live2d-canvas ${loadState === "ready" ? "ready" : ""}`} />
+      <button className="human-hit-area" onClick={cycleInteraction} aria-label="和狐娘导游互动" />
+      <canvas ref={canvasRef} className={`live2d-canvas ${loadState === "ready" ? "ready" : ""}`} onClick={cycleInteraction} />
       <div className={`avatar fallback-avatar ${loadState === "fallback" ? "show" : ""}`}>
         <div className="hair" />
         <div className="face">
@@ -508,12 +705,53 @@ function DigitalHuman({ speaking, mood }: { speaking: boolean; mood: Answer["emo
       </div>
       <div className="live2d-source">
         <span title={loadError}>{loadState === "ready" ? "Live2D 模型已加载" : loadState === "loading" ? "正在加载 Live2D" : `模型加载失败：${loadError || "备用形象"}`}</span>
-        <b>Eikanya / Senko_Normals</b>
+        <b>Eikanya / {model.source}</b>
+      </div>
+      <div className={`guide-model-picker ${pickerOpen ? "open" : ""}`} aria-label="选择 AI 导游形象">
+        <button className="guide-pet-switch" onClick={() => setPickerOpen((open) => !open)} title="切换桌宠形象">
+          <Bot size={16} />
+          <span>{model.label}</span>
+        </button>
+        <div className="guide-pet-drawer">
+          {guideModels.map((item) => (
+            <button
+              key={item.id}
+              className={selectedGuideId === item.id ? "active" : ""}
+              onClick={() => {
+                setSelectedGuideId(item.id);
+                setPickerOpen(false);
+                onAction(`切换为${item.label}形象，继续用${item.tone}风格为我导览`);
+              }}
+              title={`${item.label} / ${item.tone}`}
+            >
+              <span>{item.label}</span>
+              <b>{item.tone}</b>
+            </button>
+          ))}
+        </div>
       </div>
       <div className="human-caption">
         <Radio size={16} />
-        <span>{speaking ? "正在语音讲解" : `情绪状态：${mood}`}</span>
+        <span>{speaking ? "正在语音讲解" : `${interactionCopy[interactionMode].label}模式 / 情绪：${mood}`}</span>
       </div>
+      <div className="human-interactions">
+        {(Object.keys(interactionCopy) as Array<keyof typeof interactionCopy>).map((key) => (
+          <button
+            key={key}
+            className={interactionMode === key ? "active" : ""}
+            onClick={() => {
+              setInteractionMode(key);
+              applyInteractionPose(key);
+              onAction(interactionCopy[key].prompt);
+            }}
+          >
+            {interactionCopy[key].label}
+          </button>
+        ))}
+      </div>
+      <button className="human-speech-bubble" onClick={cycleInteraction}>
+        {interactionCopy[interactionMode].text}
+      </button>
     </div>
   );
 }
@@ -658,58 +896,110 @@ function RouteTimeline({ route }: { route: ReturnType<typeof recommendRoute> }) 
 }
 
 function MapPulsePanel({ route, ask }: { route: ReturnType<typeof recommendRoute>; ask: (question?: string) => void }) {
+  const [activeStepIndex, setActiveStepIndex] = useState(0);
+  const [navigationActive, setNavigationActive] = useState(false);
+  const [showAllPois, setShowAllPois] = useState(false);
+  const [showFacilities, setShowFacilities] = useState(true);
+  const [showRouteList, setShowRouteList] = useState(false);
   const routeNodes = route.spots
     .map((name) => spots.find((node) => node.name === name))
     .filter((node): node is (typeof spots)[number] => Boolean(node));
-  const routePoints = routeNodes.map((node) => `${node.x},${node.y}`).join(" ");
   const current = routeNodes[0];
   const next = routeNodes[1];
+  const routeStepNames = new Set(route.spots);
+  const matchedSteps = realSceneSteps.filter((step) => routeStepNames.has(step.from) || routeStepNames.has(step.to));
+  const sceneSteps = matchedSteps.length >= 3 ? matchedSteps : realSceneSteps.slice(0, 6);
+  const activeStep = sceneSteps[Math.min(activeStepIndex, sceneSteps.length - 1)] ?? realSceneSteps[0];
+  const activeStepProgress = sceneSteps.length > 1 ? Math.round((activeStepIndex / (sceneSteps.length - 1)) * 100) : 100;
+  const activeFromNode = spots.find((node) => node.name === activeStep.from) ?? current;
+  const activeToNode = spots.find((node) => node.name === activeStep.to) ?? next ?? current;
+
+  function startNavigation(index = activeStepIndex) {
+    const nextIndex = Math.min(index, sceneSteps.length - 1);
+    const step = sceneSteps[nextIndex];
+    if (!step) return;
+    setActiveStepIndex(nextIndex);
+    setNavigationActive(true);
+    ask(`开始景区导览图导航：从${step.from}到${step.to}。请告诉我下一步怎么走`);
+  }
+
+  function moveNavigation(direction: "next" | "previous") {
+    const offset = direction === "next" ? 1 : -1;
+    const nextIndex = Math.min(Math.max(activeStepIndex + offset, 0), sceneSteps.length - 1);
+    setActiveStepIndex(nextIndex);
+    const step = sceneSteps[nextIndex];
+    if (step) ask(`继续导航：从${step.from}到${step.to}`);
+  }
 
   return (
     <aside className="side-panel map-pulse">
-      <PanelTitle icon={<MapPin size={18} />} title="地图式实时导览" />
+      <div className="map-headline">
+        <PanelTitle icon={<MapPin size={18} />} title="高德式景区导航" />
+        <div className="map-mode-switch">
+          <button className="active">
+            <Compass size={15} />
+            景区导览图
+          </button>
+        </div>
+      </div>
       <div className="map-status">
         <div>
-          <span>当前位置</span>
-          <strong>{current?.name ?? "景区入口"}</strong>
+          <span>{navigationActive ? "正在导航" : "导览图定位"}</span>
+          <strong>{activeStep.from}</strong>
         </div>
         <div>
           <span>下一站</span>
-          <strong>{next?.name ?? "自由游览"}</strong>
+          <strong>{activeStep.to}</strong>
         </div>
-        <b>步行约 8 分钟</b>
+        <b>{activeStep.distance} / {activeStep.minutes} 分钟</b>
       </div>
-      <div className="mini-map scenic-map" aria-label="景区游览地图">
-        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="route-svg">
-          <path d="M 12 86 C 28 70, 34 62, 48 48 S 62 34, 74 24" />
-          {routePoints && <polyline points={routePoints} />}
-        </svg>
-        <div className="map-water">太湖</div>
-        <div className="map-mountain">小灵山</div>
-        {spots.map((node) => (
-          <button
-            key={node.name}
-            className={`map-node scenic-node ${route.spots.includes(node.name) ? "on-route" : ""}`}
-            style={{ left: `${node.x}%`, top: `${node.y}%`, "--heat": `${0.62 + node.heat / 240}` } as React.CSSProperties}
-            title={`${node.name}：热度 ${node.heat}`}
-            onClick={() => ask(`讲解${node.name}`)}
-          >
-            <span>{route.spots.indexOf(node.name) >= 0 ? route.spots.indexOf(node.name) + 1 : node.heat}</span>
-          </button>
-        ))}
-        {facilities.map((facility) => (
-          <button
-            key={facility.name}
-            className="facility-node"
-            style={{ left: `${facility.x}%`, top: `${facility.y}%` }}
-            title={`${facility.type}：${facility.name}`}
-            onClick={() => ask(`带我去${facility.name}`)}
-          >
-            {facility.icon}
-          </button>
-        ))}
+      {navigationActive && (
+        <div className="navigation-live-card">
+          <div>
+            <span>路线进度 {activeStepIndex + 1}/{sceneSteps.length}</span>
+            <strong>{activeStep.from} → {activeStep.to}</strong>
+          </div>
+          <div className="navigation-progress" aria-label={`导航进度 ${activeStepProgress}%`}>
+            <span style={{ width: `${activeStepProgress}%` }} />
+          </div>
+          <p>{activeStep.hint}</p>
+        </div>
+      )}
+      <div className="mini-map scenic-map guide-map-mode" aria-label="景区 2D 导览图导航">
+        <ScenicGuideMapView
+          route={route}
+          activeStep={activeStep}
+          navigationActive={navigationActive}
+          showAllPois={showAllPois}
+          showFacilities={showFacilities}
+          ask={ask}
+        />
       </div>
-      <RealSceneNavigation route={route} ask={ask} />
+      <RealSceneNavigation
+        steps={sceneSteps}
+        activeIndex={activeStepIndex}
+        navigationActive={navigationActive}
+        showRouteList={showRouteList}
+        setActiveIndex={(index) => {
+          setActiveStepIndex(index);
+          setNavigationActive(true);
+        }}
+        toggleRouteList={() => setShowRouteList((current) => !current)}
+        startNavigation={startNavigation}
+        moveNavigation={moveNavigation}
+        stopNavigation={() => setNavigationActive(false)}
+        ask={ask}
+      />
+      <div className="map-layer-controls">
+        <button className={showAllPois ? "active" : ""} onClick={() => setShowAllPois((current) => !current)}>
+          <MapPin size={15} />
+          全部景点
+        </button>
+        <button className={showFacilities ? "active" : ""} onClick={() => setShowFacilities((current) => !current)}>
+          <ShieldCheck size={15} />
+          服务点
+        </button>
+      </div>
       <div className="map-actions">
         {routeNodes.slice(0, 3).map((node, index) => (
           <div key={node.name} onClick={() => ask(`讲解${node.name}`)}>
@@ -722,33 +1012,214 @@ function MapPulsePanel({ route, ask }: { route: ReturnType<typeof recommendRoute
   );
 }
 
-function RealSceneNavigation({ route, ask }: { route: ReturnType<typeof recommendRoute>; ask: (question?: string) => void }) {
-  const routeStepNames = new Set(route.spots);
-  const matchedSteps = realSceneSteps.filter((step) => routeStepNames.has(step.from) || routeStepNames.has(step.to));
-  const steps = matchedSteps.length >= 3 ? matchedSteps : realSceneSteps.slice(0, 5);
+function ScenicGuideMapView(props: {
+  route: ReturnType<typeof recommendRoute>;
+  activeStep: (typeof realSceneSteps)[number];
+  navigationActive: boolean;
+  showAllPois: boolean;
+  showFacilities: boolean;
+  ask: (question?: string) => void;
+}) {
+  const { route, activeStep, navigationActive, showAllPois, showFacilities, ask } = props;
+  const routeNodes = route.spots
+    .map((name) => spots.find((node) => node.name === name))
+    .filter((node): node is (typeof spots)[number] => Boolean(node));
+  const routePoints = routeNodes
+    .map((node) => getGuideMapPosition(node.name, node))
+    .map((position) => `${position.x},${position.y}`)
+    .join(" ");
+  const fromNode = spots.find((node) => node.name === activeStep.from) ?? routeNodes[0];
+  const toNode = spots.find((node) => node.name === activeStep.to) ?? routeNodes[1] ?? routeNodes[0];
+  const fromPosition = fromNode ? getGuideMapPosition(fromNode.name, fromNode) : null;
 
   return (
-    <div className="real-scene-nav">
-      <div className="scene-nav-head">
+    <div className="guide-map-shell">
+      <img src="/maps/lingshan-guide-map.png" alt="灵山胜境景区 2D 游览图" className="guide-map-image" />
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="guide-route-layer">
+        {routePoints && <polyline className="guide-route-glow" points={routePoints} />}
+        {routePoints && <polyline className="guide-route" points={routePoints} />}
+      </svg>
+
+      <div className="guide-map-topbar">
         <div>
-          <span>AR 实景导航</span>
-          <strong>{steps[0]?.from} → {steps[0]?.to}</strong>
+          <span>景区 2D 导览图</span>
+          <strong>{navigationActive ? `${activeStep.from} → ${activeStep.to}` : "灵山胜境官方游览图"}</strong>
         </div>
-        <button onClick={() => ask(`从${steps[0]?.from}导航到${steps[0]?.to}`)}>
+        <b>图源：灵山官网</b>
+      </div>
+
+      {spots.filter((node) => showAllPois || route.spots.includes(node.name) || node.name === activeStep.from || node.name === activeStep.to).map((node) => {
+        const routeIndex = route.spots.indexOf(node.name);
+        const isActiveFrom = node.name === fromNode?.name;
+        const isActiveTo = node.name === toNode?.name;
+        const position = getGuideMapPosition(node.name, node);
+        return (
+          <button
+            key={node.name}
+            className={[
+              "guide-map-poi",
+              routeIndex >= 0 ? "on-route" : "",
+              isActiveFrom ? "nav-from" : "",
+              isActiveTo ? "nav-to" : "",
+            ].filter(Boolean).join(" ")}
+            style={{ left: `${position.x}%`, top: `${position.y}%` }}
+            title={`${node.name}：热度 ${node.heat}`}
+            onClick={() => ask(`在景区导览图上讲解${node.name}`)}
+          >
+            <span>{routeIndex >= 0 ? routeIndex + 1 : ""}</span>
+            <b>{node.name}</b>
+          </button>
+        );
+      })}
+
+      {realScenePois.map((poi) => (
+        <button
+          key={poi.name}
+          className={`guide-scene-poi poi-${poi.type}`}
+          style={{ left: `${getGuideMapPosition(poi.name, poi).x}%`, top: `${getGuideMapPosition(poi.name, poi).y}%` }}
+          title={`${poi.name}：${poi.detail}`}
+          onClick={() => ask(`在景区导览图上定位${poi.name}：${poi.detail}`)}
+        >
+          {poi.icon}
+        </button>
+      ))}
+
+      {showFacilities && facilities.map((facility) => (
+        <button
+          key={facility.name}
+          className="guide-facility"
+          style={{ left: `${getGuideMapPosition(facility.name, facility).x}%`, top: `${getGuideMapPosition(facility.name, facility).y}%` }}
+          title={`${facility.type}：${facility.name}`}
+          onClick={() => ask(`景区导览图带我去${facility.name}`)}
+        >
+          {facility.icon}
+        </button>
+      ))}
+
+      {fromPosition && (
+        <button
+          className="guide-location"
+          style={{ left: `${fromPosition.x}%`, top: `${fromPosition.y}%` }}
+          title={`当前位置：${fromNode?.name}`}
+          onClick={() => ask(`我在景区导览图的${fromNode?.name}，下一步怎么走？`)}
+        >
+          <Navigation size={18} />
+        </button>
+      )}
+
+      <div className="guide-map-bottom-sheet">
+        <span>{navigationActive ? "导览图导航中" : "导览图路线已规划"}</span>
+        <strong>{activeStep.hint}</strong>
+        <button onClick={() => ask(`继续按景区导览图导航到${activeStep.to}`)}>
           <Navigation size={16} />
-          开始
+          继续
         </button>
       </div>
-      <div className="scene-strip">
-        {steps.map((step, index) => (
-          <button key={`${step.from}-${step.to}`} onClick={() => ask(`从${step.from}怎么走到${step.to}`)}>
+    </div>
+  );
+}
+
+function RealSceneViewport(props: { step: (typeof realSceneSteps)[number]; navigationActive: boolean; ask: (question?: string) => void }) {
+  const { step, navigationActive, ask } = props;
+  return (
+    <div className="scene-viewport">
+      <div className="scene-sky" />
+      <div className="scene-ground" />
+      <div className="scene-corridor">
+        <span />
+        <span />
+        <span />
+      </div>
+      <div className="scene-direction">
+        <Compass size={18} />
+        <div>
+          <span>{navigationActive ? "导航中" : step.bearing}</span>
+          <strong>{step.to}</strong>
+        </div>
+      </div>
+      <button className="scene-landmark" onClick={() => ask(`识别地标：${step.landmark}`)}>
+        <Camera size={16} />
+        {step.landmark}
+      </button>
+      <div className="scene-instruction">
+        <strong>{step.from} → {step.to}</strong>
+        <p>{step.hint}</p>
+      </div>
+    </div>
+  );
+}
+
+function RealSceneNavigation(props: {
+  steps: typeof realSceneSteps;
+  activeIndex: number;
+  navigationActive: boolean;
+  showRouteList: boolean;
+  setActiveIndex: (index: number) => void;
+  toggleRouteList: () => void;
+  startNavigation: (index?: number) => void;
+  moveNavigation: (direction: "next" | "previous") => void;
+  stopNavigation: () => void;
+  ask: (question?: string) => void;
+}) {
+  const { steps, activeIndex, navigationActive, showRouteList, setActiveIndex, toggleRouteList, startNavigation, moveNavigation, stopNavigation, ask } = props;
+  const activeStep = steps[activeIndex];
+  return (
+    <div className={`real-scene-nav ${navigationActive ? "is-navigating" : ""}`}>
+      <div className="scene-nav-head">
+        <div>
+          <span>{navigationActive ? "导航已启动" : "导览图步行导航"}</span>
+          <strong>{steps[activeIndex]?.from} → {steps[activeIndex]?.to}</strong>
+        </div>
+        <div className="scene-nav-controls">
+          {navigationActive && (
+            <button onClick={() => moveNavigation("previous")} disabled={activeIndex === 0}>
+              上一段
+            </button>
+          )}
+          <button className="primary" onClick={() => navigationActive ? moveNavigation("next") : startNavigation(activeIndex)} disabled={navigationActive && activeIndex === steps.length - 1}>
+            <Navigation size={16} />
+            {navigationActive ? "下一段" : "开始"}
+          </button>
+          {navigationActive && (
+            <button onClick={stopNavigation}>
+              结束
+            </button>
+          )}
+          <button onClick={toggleRouteList}>
+            {showRouteList ? "收起" : "全程"}
+          </button>
+        </div>
+      </div>
+      {activeStep && (
+        <div className="active-step-card">
+          <span>{String(activeIndex + 1).padStart(2, "0")}</span>
+          <div>
+            <strong>{activeStep.to}</strong>
+            <p>{activeStep.hint}</p>
+          </div>
+          <b>{activeStep.distance} / {activeStep.minutes} 分钟</b>
+        </div>
+      )}
+      <div className={`scene-strip ${showRouteList ? "expanded" : "collapsed"}`}>
+        {(showRouteList ? steps : steps.slice(Math.max(0, activeIndex - 1), Math.min(steps.length, activeIndex + 2))).map((step, scopedIndex) => {
+          const index = showRouteList ? scopedIndex : Math.max(0, activeIndex - 1) + scopedIndex;
+          return (
+          <button
+            key={`${step.from}-${step.to}`}
+            className={activeIndex === index ? "active" : ""}
+            onClick={() => {
+              setActiveIndex(index);
+              ask(`导航到第${index + 1}段：从${step.from}到${step.to}`);
+            }}
+          >
             <span>{String(index + 1).padStart(2, "0")}</span>
             <strong>{step.to}</strong>
             <em>{step.distance} / {step.minutes} 分钟</em>
             <p>{step.view}</p>
             <b>{step.landmark}</b>
           </button>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -996,7 +1467,7 @@ function KnowledgeConsole() {
       </div>
       <div className="faq-panel">
         <PanelTitle icon={<Settings size={18} />} title="数字人配置" />
-        {["Eikanya/Senko_Normals 模型", "本地开源 TTS", "讲解/思考/安抚表情", "语音字幕同步", "儿童/老人/研学讲法"].map((item) => (
+        {["Eikanya/Fox Hime Zero 狐娘模型", "本地开源 TTS", "讲解/思考/安抚表情", "语音字幕同步", "儿童/老人/研学讲法"].map((item) => (
           <div className="config-row" key={item}>
             <Volume2 size={16} />
             <span>{item}</span>
