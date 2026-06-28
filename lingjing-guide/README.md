@@ -1,15 +1,43 @@
 # 灵境导游 - 景区导览服务 AI 数字人
 
-这是面向中国软件杯 A5「景区导览服务AI数字人」赛题的可运行参赛原型，覆盖游客端、AI 数字人导览、可解释知识库问答、个性化路线推荐、运营后台、游客感受度报告和知识库管理。
+面向中国软件杯 A5「景区导览服务 AI 数字人」赛题的可运行参赛原型。项目已经内置游客端、管理端、Live2D 互动导游、景区 2D 导览图、模拟导航、景点照片详情、语音播报适配层、知识库问答、个性化路线推荐和运营看板。
 
-## 运行
+## 克隆当前配置
+
+仓库地址：
 
 ```bash
-npm install
+git clone https://github.com/squff/lingjing-guide.git
+cd lingjing-guide
+```
+
+当前主分支：
+
+```bash
+git checkout master
+```
+
+推荐环境：
+
+```text
+Node.js 20+
+npm 10+
+Windows 11 / macOS / Linux 均可运行
+```
+
+安装依赖：
+
+```bash
+npm ci
+```
+
+启动本地开发服务：
+
+```bash
 npm run dev
 ```
 
-入口地址：
+默认访问地址：
 
 ```text
 入口选择页：http://127.0.0.1:5173/#/
@@ -23,47 +51,99 @@ npm run dev
 npm run build
 ```
 
-## 已实现能力
+本地预览构建产物：
 
-- 游客端：文本问答、语音输入演示、语音播报、数字人口型和表情状态、快捷问题。
-- 端侧分离：游客端和管理端使用独立入口与独立界面结构，符合真实产品部署和演示角色切换。
-- Live2D 形象：已接入本地 Live2D 模型舞台，模型文件来自 `Eikanya/Live2d-model` 的 `Live2D/Senko_Normals`。
-- 开源语音：已接入 OpenAI-compatible 本地 TTS 适配层，支持 CosyVoice、ChatTTS、IndexTTS、LocalAI 等免费开源语音服务。
-- AI 问答：内置灵山胜境知识库、关键词检索、命中来源、置信度展示、无答案兜底。
-- 路线推荐：根据兴趣、时长、同行人群、游览节奏推荐差异化路线。
-- 情绪互动：识别焦急、疲惫、疑惑等状态，并切换安抚式服务话术。
-- 运营后台：满意度趋势、客流趋势、消费结构、热门问答、AI 运营建议。
-- 知识库后台：示范资料条目、标准问答测试集、数字人配置状态。
-- 决赛展示：夺冠答辩驾驶舱、评分项矩阵、7 分钟演示脚本、评委可感知亮点。
-- 空间智能：景区热力与情绪地图，展示热门景点、负面情绪和运营动作建议。
-- 质量闸门：知识片段数、标准问答、事实命中率、检索耗时等可解释指标。
-
-## 推荐演示脚本
-
-1. 打开游客端，点击「语音输入」按钮，触发“九龙灌浴什么时候表演？”演示。
-2. 切换游客画像为“老人同行 + 轻松 + 半日”，点击“讲解路线”。
-3. 输入“我有点累，排队太久了”，展示情绪安抚和轻松路线推荐。
-4. 切换到运营后台，展示满意度趋势、热门问答和 AI 运营建议。
-5. 切换到知识库，展示 RAG 知识来源、标准问答测试集和数字人配置。
-6. 切换到夺冠看板，按评分矩阵和 7 分钟脚本完成答辩排练。
-
-## 后续可接入真实能力
-
-- 后端 API：FastAPI/NestJS。
-- 向量数据库：Qdrant、Milvus、Chroma 或 FAISS。
-- 大模型：OpenAI、通义千问、智谱、DeepSeek 或本地开源模型。
-- 语音识别：Whisper、FunASR。
-- 语音合成：CosyVoice、Edge TTS、ParaTTS。
-- 数字人：Live2D、VRM 或商用数字人 SDK。
-
-开源语音模型接入细节见：[docs/open-source-tts.md](docs/open-source-tts.md)
-
-## 素材来源说明
-
-当前 Live2D 模型用于本地参赛原型演示，来源：
-
-```text
-https://github.com/Eikanya/Live2d-model/tree/master/Live2D/Senko_Normals
+```bash
+npm run preview
 ```
 
-该仓库 README 提醒模型素材需遵守原始 LICENSE，不建议商用。正式提交或公开发布时，建议替换为团队自制模型、开源商用授权模型，或在文档中明确标注素材来源和使用边界。
+## 当前仓库已包含的资源
+
+克隆后不需要额外下载核心演示素材，以下资源已经放在 `public/` 目录：
+
+- Live2D Cubism 运行核心：`public/live2d/live2dcubismcore.min.js`
+- 多个 Live2D 模型：`public/live2d/foxgirl`、`mori_suit`、`ruri_miko`、`mori_mikoc`、`senko`
+- 景区 2D 导览图：`public/maps/lingshan-guide-map.png`
+- 景点照片：`public/spots/*.jpg`
+- 开源语音接入说明：`docs/open-source-tts.md`
+
+## 功能入口
+
+游客端 `/#/visitor`：
+
+- AI 数字人桌宠式导览
+- 多角色 Live2D 模型切换
+- 文本问答、语音输入演示、语音播报
+- 景区 2D 地图导航和模拟前进
+- 点击景点展示照片、简介、热度、讲解与导航按钮
+- 个性化路线推荐、行程时间轴、拍照建议、应急服务
+- 手机端底部导航和响应式布局
+
+管理端 `/#/admin`：
+
+- 运营总览看板
+- 知识库质量与问答命中展示
+- 满意度、消费结构、热门问题和 AI 运营建议
+- 决赛答辩驾驶舱、评分矩阵和演示脚本
+
+## 技术栈
+
+- React 19
+- TypeScript
+- Vite
+- Recharts
+- lucide-react
+- live2d-renderer
+- 原生 CSS 响应式界面
+
+## 常用命令
+
+```bash
+npm ci
+npm run dev
+npm run build
+npm run preview
+```
+
+如果 `npm ci` 因本地 npm 版本差异失败，可改用：
+
+```bash
+npm install
+```
+
+## 语音模型配置
+
+项目内置浏览器语音兜底，并提供 OpenAI-compatible TTS 适配层。可以接入 CosyVoice、ChatTTS、IndexTTS、LocalAI 等免费开源语音服务。
+
+详细配置见：
+
+```text
+docs/open-source-tts.md
+```
+
+没有启动本地 TTS 服务时，项目仍然可以正常运行，语音功能会使用浏览器可用能力或演示状态。
+
+## 素材来源与使用边界
+
+Live2D 模型素材主要来自：
+
+```text
+https://github.com/Eikanya/Live2d-model
+```
+
+景区照片和地图素材用于参赛原型演示。正式公开发布、商业使用或提交长期维护版本前，建议替换为团队自制素材、景区官方授权素材或明确可商用授权素材，并在文档中保留来源说明。
+
+## 克隆后看不到效果时
+
+1. 确认命令在项目根目录执行：`lingjing-guide`
+2. 确认依赖已安装：`npm ci`
+3. 确认端口地址是 `http://127.0.0.1:5173/#/visitor`
+4. 如果 5173 被占用，Vite 会提示新的端口，按终端输出访问
+5. 如果 Live2D 没显示，先确认 `public/live2d` 目录存在且浏览器控制台没有资源 404
+
+## 当前推送位置
+
+```text
+GitHub：https://github.com/squff/lingjing-guide.git
+分支：master
+```
