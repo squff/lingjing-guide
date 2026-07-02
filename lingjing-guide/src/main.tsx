@@ -78,7 +78,7 @@ import {
   timelineTasks,
   unresolvedQuestions,
 } from "./data";
-import { VoiceConfig, defaultVoiceConfig, speakWithVoiceEngine } from "./voice";
+import { VoiceConfig, defaultVoiceConfig, speakWithVoiceEngine, stopCurrentAudio } from "./voice";
 import "./styles.css";
 
 type AppMode = "portal" | "visitor" | "admin";
@@ -144,6 +144,7 @@ const guideModels = [
 type GuideModel = (typeof guideModels)[number];
 
 const guideMapPositions: Record<string, { x: number; y: number }> = {
+  南门入口: { x: 52, y: 90 },
   灵山大照壁: { x: 46, y: 84 },
   五明桥: { x: 27, y: 68 },
   佛足坛: { x: 32, y: 62 },
@@ -210,14 +211,33 @@ const fallbackSpotPhotos = [
   { image: "/spots/brahma-palace-wide.jpg", label: "灵山胜境建筑实景" },
 ];
 
+const generatedScenicPhotos = [
+  { image: "/cute/scenic-entrance.png", label: "AI 生成入口照壁" },
+  { image: "/cute/scenic-lotus.png", label: "AI 生成莲池广场" },
+  { image: "/cute/scenic-buddha.png", label: "AI 生成大佛步道" },
+];
+
 function getGuideMapPosition(name: string, fallback: { x: number; y: number }) {
   return guideMapPositions[name] ?? fallback;
 }
 
 function getSpotPhoto(name: string) {
-  const mappedPhoto = spotPhotoMap[name];
-  if (mappedPhoto) return mappedPhoto;
+  return getSpotPhotos(name)[0];
+}
 
+function getSpotPhotos(name: string) {
+  const mappedPhoto = spotPhotoMap[name];
+  const featuredPhoto = name.includes("九龙") || name.includes("莲")
+    ? generatedScenicPhotos[1]
+    : name.includes("佛") || name.includes("大")
+      ? generatedScenicPhotos[2]
+      : generatedScenicPhotos[0];
+  const photos = [featuredPhoto, ...generatedScenicPhotos.filter((photo) => photo.image !== featuredPhoto.image)];
+  if (mappedPhoto) photos.push(mappedPhoto);
+  return photos;
+}
+
+function getFallbackSpotPhoto(name: string) {
   const photoIndex =
     Array.from(name).reduce((total, character) => total + character.charCodeAt(0), 0) % fallbackSpotPhotos.length;
   return fallbackSpotPhotos[photoIndex];
@@ -271,7 +291,7 @@ function App() {
     setProfile((current) => ({ ...current, ...next }));
   }
 
-  function ask(nextQuestion = question) {
+  function ask(nextQuestion = question, options: { speak?: boolean } = {}) {
     const trimmed = nextQuestion.trim();
     if (!trimmed) return;
     const answer = answerQuestion(trimmed, profile);
@@ -281,7 +301,12 @@ function App() {
       { role: "guide", text: answer.text, answer },
     ]);
     setQuestion("");
-    speak(answer.text);
+    if (options.speak) {
+      speak(answer.text);
+    } else {
+      stopCurrentAudio();
+      setSpeaking(false);
+    }
   }
 
   async function speak(text: string) {
@@ -298,7 +323,7 @@ function App() {
       setVoiceState("idle");
       const demo = profile.group === "老人同行" ? "我有点累，老人同行，帮我改成少台阶路线" : "九龙灌浴什么时候表演，哪里拍照好看？";
       setQuestion(demo);
-      ask(demo);
+      ask(demo, { speak: true });
     }, 900);
   }
 
@@ -689,6 +714,9 @@ function DigitalHuman(props: {
     setLoadError("");
     modelRef.current?.destroy(false);
     modelRef.current = null;
+    const loadTimeout = window.setTimeout(() => {
+      if (!cancelled && !modelRef.current) setLoadState("fallback");
+    }, 4500);
 
     const resizeCanvas = () => {
       const rect = liveCanvas.getBoundingClientRect();
@@ -970,6 +998,7 @@ function MapPulsePanel({ route, ask }: { route: ReturnType<typeof recommendRoute
   const [showFacilities, setShowFacilities] = useState(true);
   const [showRouteList, setShowRouteList] = useState(false);
   const [selectedMapItem, setSelectedMapItem] = useState(route.spots[0] ?? "");
+  const [scenicAlbumIndex, setScenicAlbumIndex] = useState(0);
   const routeNodes = route.spots
     .map((name) => spots.find((node) => node.name === name))
     .filter((node): node is (typeof spots)[number] => Boolean(node));
@@ -982,6 +1011,7 @@ function MapPulsePanel({ route, ask }: { route: ReturnType<typeof recommendRoute
   const activeStepProgress = sceneSteps.length > 0 ? Math.round(((activeStepIndex + segmentProgress / 100) / sceneSteps.length) * 100) : 0;
   const activeFromNode = spots.find((node) => node.name === activeStep.from) ?? current;
   const activeToNode = spots.find((node) => node.name === activeStep.to) ?? next ?? current;
+  const scenicAlbumPhoto = generatedScenicPhotos[scenicAlbumIndex % generatedScenicPhotos.length];
 
   useEffect(() => {
     setActiveStepIndex(0);
@@ -1067,6 +1097,23 @@ function MapPulsePanel({ route, ask }: { route: ReturnType<typeof recommendRoute
         </div>
         <b>{activeStep.distance} / {activeStep.minutes} 分钟</b>
       </div>
+      <div className="scenic-photo-shelf">
+        <img src={scenicAlbumPhoto.image} alt={scenicAlbumPhoto.label} />
+        <div>
+          <span>AI 场景相册</span>
+          <strong>{scenicAlbumPhoto.label}</strong>
+          <div className="scenic-photo-dots">
+            {generatedScenicPhotos.map((photo, index) => (
+              <button
+                key={photo.image}
+                className={index === scenicAlbumIndex ? "active" : ""}
+                onClick={() => setScenicAlbumIndex(index)}
+                aria-label={`切换 AI 场景照片 ${index + 1}`}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
       {navigationActive && (
         <div className="navigation-live-card">
           <div>
@@ -1148,6 +1195,7 @@ function ScenicGuideMapView(props: {
   ask: (question?: string) => void;
 }) {
   const { route, activeStep, navigationActive, segmentProgress, advanceNavigation, selectedMapItem, setSelectedMapItem, showAllPois, showFacilities, ask } = props;
+  const [photoVariantIndex, setPhotoVariantIndex] = useState(0);
   const routeNodes = route.spots
     .map((name) => spots.find((node) => node.name === name))
     .filter((node): node is (typeof spots)[number] => Boolean(node));
@@ -1157,13 +1205,24 @@ function ScenicGuideMapView(props: {
     .join(" ");
   const fromNode = spots.find((node) => node.name === activeStep.from) ?? routeNodes[0];
   const toNode = spots.find((node) => node.name === activeStep.to) ?? routeNodes[1] ?? routeNodes[0];
-  const fromPosition = fromNode ? getGuideMapPosition(fromNode.name, fromNode) : null;
-  const toPosition = toNode ? getGuideMapPosition(toNode.name, toNode) : fromPosition;
+  const fromPosition = getGuideMapPosition(activeStep.from, fromNode ?? { x: 52, y: 90 });
+  const toPosition = getGuideMapPosition(activeStep.to, toNode ?? fromPosition);
   const currentPosition = fromPosition && toPosition && navigationActive ? interpolateMapPosition(fromPosition, toPosition, segmentProgress) : fromPosition;
+  const activeSegmentPoints = fromPosition && toPosition ? `${fromPosition.x},${fromPosition.y} ${toPosition.x},${toPosition.y}` : "";
+  const traveledSegmentPoints = fromPosition && currentPosition ? `${fromPosition.x},${fromPosition.y} ${currentPosition.x},${currentPosition.y}` : "";
+  const remainingSegmentPoints = currentPosition && toPosition ? `${currentPosition.x},${currentPosition.y} ${toPosition.x},${toPosition.y}` : "";
   const selectedSpot = spots.find((spot) => spot.name === selectedMapItem);
   const selectedFacility = facilities.find((facility) => facility.name === selectedMapItem);
   const selectedPoi = realScenePois.find((poi) => poi.name === selectedMapItem);
-  const selectedPhoto = getSpotPhoto(selectedMapItem);
+  const selectedTitle = selectedSpot || selectedFacility || selectedPoi ? selectedMapItem : activeStep.from;
+  const selectedKind = selectedSpot ? selectedSpot.category : selectedFacility ? selectedFacility.type : selectedPoi ? selectedPoi.type : "AI 场景相册";
+  const selectedDescription = selectedSpot ? briefText(selectedSpot.description) : selectedFacility ? `${selectedFacility.name}，当前拥挤度：${selectedFacility.crowd}。` : selectedPoi ? selectedPoi.detail : `${activeStep.from} 前往 ${activeStep.to} 的导览照片，可切换不同氛围参考。`;
+  const photoChoices = getSpotPhotos(selectedMapItem);
+  const selectedPhoto = photoChoices[photoVariantIndex % photoChoices.length] ?? getSpotPhoto(selectedMapItem);
+
+  useEffect(() => {
+    setPhotoVariantIndex(0);
+  }, [selectedMapItem]);
 
   return (
     <div className="guide-map-shell">
@@ -1171,6 +1230,9 @@ function ScenicGuideMapView(props: {
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="guide-route-layer">
         {routePoints && <polyline className="guide-route-glow" points={routePoints} />}
         {routePoints && <polyline className="guide-route" points={routePoints} />}
+        {navigationActive && activeSegmentPoints && <polyline className="guide-active-segment" points={activeSegmentPoints} />}
+        {navigationActive && remainingSegmentPoints && <polyline className="guide-remaining-segment" points={remainingSegmentPoints} />}
+        {navigationActive && traveledSegmentPoints && <polyline className="guide-traveled-segment" points={traveledSegmentPoints} />}
       </svg>
 
       <div className="guide-map-topbar">
@@ -1242,24 +1304,37 @@ function ScenicGuideMapView(props: {
         <button
           className={`guide-location ${navigationActive ? "moving" : ""}`}
           style={{ left: `${currentPosition.x}%`, top: `${currentPosition.y}%` }}
-          title={`当前位置：${navigationActive ? `${activeStep.from}前往${activeStep.to} ${segmentProgress}%` : fromNode?.name}`}
+          title={`当前位置：${navigationActive ? `${activeStep.from}前往${activeStep.to} ${segmentProgress}%` : activeStep.from}`}
           onClick={() => ask(`我现在在${activeStep.from}到${activeStep.to}之间，进度${segmentProgress}%，下一步怎么走？`)}
         >
           <Navigation size={18} />
         </button>
       )}
 
-      {(selectedSpot || selectedFacility || selectedPoi) && (
+      {(selectedSpot || selectedFacility || selectedPoi || navigationActive) && (
         <div className="guide-spot-card">
           <div className="guide-spot-photo">
             <img key={selectedPhoto.image} src={selectedPhoto.image} alt={selectedPhoto.label} />
             <span>{selectedPhoto.label}</span>
+            <div className="guide-photo-switcher">
+              {photoChoices.slice(0, 4).map((photo, index) => (
+                <button
+                  key={photo.image}
+                  className={index === photoVariantIndex ? "active" : ""}
+                  onClick={() => setPhotoVariantIndex(index)}
+                  aria-label={`切换照片 ${index + 1}`}
+                >
+                  <img src={photo.image} alt="" />
+                </button>
+              ))}
+            </div>
           </div>
           <div className="guide-spot-content">
             <div>
-              <span>{selectedSpot ? selectedSpot.category : selectedFacility ? selectedFacility.type : selectedPoi?.type}</span>
-              <strong>{selectedMapItem}</strong>
+              <span>{selectedKind}</span>
+              <strong>{selectedTitle}</strong>
             </div>
+            <p className="guide-spot-description">{selectedDescription}</p>
             <p>{selectedSpot ? briefText(selectedSpot.description) : selectedFacility ? `${selectedFacility.name}，当前拥挤度：${selectedFacility.crowd}。` : selectedPoi?.detail}</p>
             {selectedSpot && (
               <div className="guide-spot-meta">
@@ -1500,9 +1575,10 @@ function AdminConsole() {
             <CartesianGrid stroke="rgba(255,255,255,.08)" vertical={false} />
             <XAxis dataKey="day" tick={{ fill: "#9aa89f" }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fill: "#9aa89f" }} axisLine={false} tickLine={false} domain={[3.8, 5]} />
+            <YAxis yAxisId="emotion" hide domain={[60, 100]} />
             <Tooltip contentStyle={{ background: "#101713", border: "1px solid rgba(216,183,102,.25)", color: "#f6efe0" }} />
-            <Area type="monotone" dataKey="score" stroke="#d8b766" fill="url(#score)" strokeWidth={3} />
-            <Line type="monotone" dataKey="emotion" stroke="#74c7b0" strokeWidth={2} dot={false} />
+            <Area type="monotone" dataKey="score" stroke="#d8b766" fill="url(#score)" strokeWidth={3} isAnimationActive={false} dot={{ r: 4 }} />
+            <Line yAxisId="emotion" type="monotone" dataKey="emotion" stroke="#74c7b0" strokeWidth={3} isAnimationActive={false} dot={{ r: 3 }} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
